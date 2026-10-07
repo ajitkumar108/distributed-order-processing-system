@@ -4,6 +4,8 @@ package com.example.distributed_order_processing_system.service;
 import com.example.distributed_order_processing_system.dto.OrderRequest;
 import com.example.distributed_order_processing_system.entity.Order;
 import com.example.distributed_order_processing_system.enums.OrderStatus;
+import com.example.distributed_order_processing_system.events.OrderSagaEvent;
+import com.example.distributed_order_processing_system.kafka.OrderEventProducer;
 import com.example.distributed_order_processing_system.repository.OrderRepository;
 import com.example.distributed_order_processing_system.repository.SagaStateRepository;
 import com.example.distributed_order_processing_system.saga.SagaState;
@@ -12,6 +14,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.Map;
 import java.util.UUID;
 
 @Service
@@ -20,6 +23,7 @@ public class OrderService {
 
     private final OrderRepository orderRepository;
     private final SagaStateRepository sagaStateRepository;
+    private final OrderEventProducer orderEventProducer;
 
     public Order createOrder(OrderRequest request) {
 
@@ -43,6 +47,18 @@ public class OrderService {
                 .build();
 
         sagaStateRepository.save(sagaState);
+
+            OrderSagaEvent event = OrderSagaEvent.builder().
+                                   sagaId(sagaState.getSagaId().toString())
+                                   .orderId(savedOrder.getId().toString())
+                                   .eventType("PAYMENT_REQUESTED")
+                                   .timestamp(LocalDateTime.now())
+                                   .payload(Map.of(
+                                    "amount",savedOrder.getAmount(),
+                                    "productId", savedOrder.getProductId(),
+                                    "quantity",savedOrder.getQuantity()
+                                   ))
+                                   .build();
 
         return savedOrder;
     }
