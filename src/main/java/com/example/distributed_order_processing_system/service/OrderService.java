@@ -1,6 +1,5 @@
 package com.example.distributed_order_processing_system.service;
 
-
 import com.example.distributed_order_processing_system.dto.OrderRequest;
 import com.example.distributed_order_processing_system.entity.Order;
 import com.example.distributed_order_processing_system.enums.OrderStatus;
@@ -27,6 +26,7 @@ public class OrderService {
 
     public Order createOrder(OrderRequest request) {
 
+        // Create Order
         Order order = Order.builder()
                 .productId(request.getProductId())
                 .quantity(request.getQuantity())
@@ -37,6 +37,7 @@ public class OrderService {
 
         Order savedOrder = orderRepository.save(order);
 
+        // Create Saga State
         SagaState sagaState = SagaState.builder()
                 .sagaId(UUID.randomUUID())
                 .orderId(savedOrder.getId())
@@ -48,17 +49,25 @@ public class OrderService {
 
         sagaStateRepository.save(sagaState);
 
-            OrderSagaEvent event = OrderSagaEvent.builder().
-                                   sagaId(sagaState.getSagaId().toString())
-                                   .orderId(savedOrder.getId().toString())
-                                   .eventType("PAYMENT_REQUESTED")
-                                   .timestamp(LocalDateTime.now())
-                                   .payload(Map.of(
-                                    "amount",savedOrder.getAmount(),
-                                    "productId", savedOrder.getProductId(),
-                                    "quantity",savedOrder.getQuantity()
-                                   ))
-                                   .build();
+        // Create Kafka Event
+        OrderSagaEvent event = OrderSagaEvent.builder()
+                .sagaId(sagaState.getSagaId().toString())
+                .orderId(savedOrder.getId().toString())
+                .eventType("PAYMENT_REQUESTED")
+                .timestamp(LocalDateTime.now())
+                .payload(Map.of(
+                        "amount", savedOrder.getAmount(),
+                        "productId", savedOrder.getProductId(),
+                        "quantity", savedOrder.getQuantity()
+                ))
+                .build();
+
+        System.out.println("======== KAFKA PRODUCER ========");
+        System.out.println("Sending Event: " + event);
+        System.out.println("================================");
+
+        // Publish Event to Kafka
+        orderEventProducer.publishPaymentRequest(event);
 
         return savedOrder;
     }
