@@ -14,17 +14,25 @@ public class OrderEventProducer {
     private static final String PAYMENT_REQUEST_TOPIC =
             "payment-requests";
 
-    public void publishPaymentRequest(
-            OrderSagaEvent event) {
+    public void publishPaymentRequest(OrderSagaEvent event) {
 
         kafkaTemplate.send(
                 PAYMENT_REQUEST_TOPIC,
                 event
-        );
+        ).whenComplete((result, ex) -> {
 
-        System.out.println(
-                "PAYMENT_REQUESTED Event Published : "
-                        + event.getSagaId()
-        );
+            if (ex != null) {
+
+                System.out.println("KAFKA SEND FAILED");
+                ex.printStackTrace();
+
+            } else {
+
+                System.out.println("KAFKA SEND SUCCESS");
+                System.out.println(
+                        result.getRecordMetadata()
+                );
+            }
+        });
     }
 }
