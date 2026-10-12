@@ -11,6 +11,7 @@ import com.example.distributed_order_processing_system.saga.SagaState;
 import com.example.distributed_order_processing_system.saga.SagaStatus;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.Map;
@@ -70,5 +71,18 @@ public class OrderService {
         orderEventProducer.publishPaymentRequest(event);
 
         return savedOrder;
+    }
+    @Transactional 
+    public void confirmOrder(String orderId){
+
+        UUID orderUUID = UUID.fromString(orderId);
+        Order order = orderRepository
+                        .findById(orderUUID)
+                        .orElseThrow(() ->
+                        new RuntimeException("Order not found"));
+
+        order.setStatus(OrderStatus.CONFIRMED);
+
+        orderRepository.save(order);
     }
 }
