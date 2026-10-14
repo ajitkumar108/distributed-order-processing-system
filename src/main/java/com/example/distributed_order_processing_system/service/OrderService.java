@@ -72,17 +72,59 @@ public class OrderService {
 
         return savedOrder;
     }
-    @Transactional 
-    public void confirmOrder(String orderId){
+    @Transactional
+public void confirmOrder(String orderId) {
 
-        UUID orderUUID = UUID.fromString(orderId);
-        Order order = orderRepository
-                        .findById(orderUUID)
-                        .orElseThrow(() ->
-                        new RuntimeException("Order not found"));
+    UUID orderUUID = UUID.fromString(orderId);
 
-        order.setStatus(OrderStatus.CONFIRMED);
+    Order order = orderRepository
+            .findById(orderUUID)
+            .orElseThrow(() ->
+                    new RuntimeException("Order not found"));
 
-        orderRepository.save(order);
-    }
+    order.setStatus(OrderStatus.CONFIRMED);
+
+    orderRepository.save(order);
+
+    SagaState saga = sagaStateRepository
+            .findByOrderId(orderUUID)
+            .orElseThrow(() ->
+                    new RuntimeException("Saga not found"));
+
+    saga.setStatus(SagaStatus.COMPLETED);
+    saga.setLastEvent("PAYMENT_COMPLETED");
+    saga.setUpdatedAt(LocalDateTime.now());
+
+    sagaStateRepository.save(saga);
+
+    System.out.println("ORDER CONFIRMED : " + orderId);
+}
+
+@Transactional
+public void cancelOrder(String orderId) {
+
+    UUID orderUUID = UUID.fromString(orderId);
+
+    Order order = orderRepository
+            .findById(orderUUID)
+            .orElseThrow(() ->
+                    new RuntimeException("Order not found"));
+
+    order.setStatus(OrderStatus.CANCELLED);
+
+    orderRepository.save(order);
+
+    SagaState saga = sagaStateRepository
+            .findByOrderId(orderUUID)
+            .orElseThrow(() ->
+                    new RuntimeException("Saga not found"));
+
+    saga.setStatus(SagaStatus.FAILED);
+    saga.setLastEvent("PAYMENT_FAILED");
+    saga.setUpdatedAt(LocalDateTime.now());
+
+    sagaStateRepository.save(saga);
+
+    System.out.println("ORDER CANCELLED : " + orderId);
+}
 }

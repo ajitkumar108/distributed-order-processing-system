@@ -19,16 +19,21 @@ public class PaymentCompletedConsumer {
     )
     public void consume(OrderSagaEvent event){
 
-        System.out.println("=============================");
-        System.out.println("PAYMENT_COMPLETED RECIEVED");
+       System.out.println("EVENT RECIEVED : " + event.getEventType());
 
-        System.out.println("OrderId : " + event.getOrderId());
+       if("PAYMENT_COMPLETED".equals(event.getEventType())){
 
-        System.out.println("==============================");
+            orderService.confirmOrder(event.getOrderId());
 
-        orderService.confirmOrder(event.getOrderId());
+            System.out.println("ORDER CONFIRMED");
+       }
 
-        System.out.println("ORDER CONFIRMED");
+       else if("PAYMENT_FAILED".equals(event.getOrderId())){
+
+            orderService.cancelOrder(event.getOrderId());
+
+            System.out.println("ORDER CANCELLED");
+       }
         
     }
 
