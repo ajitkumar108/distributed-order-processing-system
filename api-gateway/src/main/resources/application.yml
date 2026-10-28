@@ -1,0 +1,66 @@
+# ======================= API GATEWAY CONFIG =======================
+server:
+  port: 9090                      # Clients call http://localhost:9090/...
+
+spring:
+  application:
+    name: api-gateway             # Name registered in Eureka (shows as API-GATEWAY)
+  cloud:
+    gateway:
+      routes:
+        # ----- Route 1: /orders/** -> ORDER-SERVICE -----
+        - id: order-service
+          uri: lb://ORDER-SERVICE # "lb://" = load-balanced lookup of this name in Eureka
+          predicates:
+            - Path=/orders/**     # Match any URL starting with /orders
+          filters:
+            - name: CircuitBreaker          # Protect the gateway if Order Service is failing
+              args:
+                name: orderCircuitBreaker   # Settings are under resilience4j.* below
+                fallbackUri: forward:/fallback/orders
+
+        # ----- Route 2: /payments/** -> PAYMENT-SERVICE -----
+        - id: payment-service
+          uri: lb://PAYMENT-SERVICE
+          predicates:
+            - Path=/payments/**
+
+        # ----- Route 3: /inventory/** -> INVENTORY-SERVICE -----
+        - id: inventory-service
+          uri: lb://INVENTORY-SERVICE
+          predicates:
+            - Path=/inventory/**
+
+eureka:
+  client:
+    service-url:
+      defaultZone: ${EUREKA_URL:http://localhost:8761/eureka}   # Where the registry is
+  instance:
+    prefer-ip-address: true       # Register with IP (works in Docker and on laptops)
+
+# ----- Circuit breaker tuning (Resilience4j) -----
+resilience4j:
+  circuitbreaker:
+    instances:
+      orderCircuitBreaker:
+        slidingWindowSize: 10                 # Look at the last 10 calls
+        failureRateThreshold: 50              # Open the circuit if >= 50% failed
+        waitDurationInOpenState: 10s          # Stay open 10s, then try again (half-open)
+        permittedNumberOfCallsInHalfOpenState: 3
+  timelimiter:
+    instances:
+      orderCircuitBreaker:
+        timeoutDuration: 5s                   # Give up on a call after 5 seconds
+
+# ----- Actuator + Tracing -----
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,circuitbreakers
+  tracing:
+    sampling:
+      probability: 1.0                        # Trace 100% of requests (fine for a demo)
+  zipkin:
+    tracing:
+      endpoint: ${ZIPKIN_URL:http://localhost:9411/api/v2/spans}

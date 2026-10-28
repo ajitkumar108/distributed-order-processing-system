@@ -1,0 +1,144 @@
+# =====================================================================
+#  Runs the WHOLE system with one command:   docker compose up --build
+#  Prerequisite: copy .env.example to .env and set DB_PASSWORD.
+# =====================================================================
+services:
+
+  # ---------------- MySQL (3 databases created by init.sql) ----------------
+  mysql:
+    image: mysql:8.4
+    container_name: saga-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in the .env file}
+    ports:
+      - "3307:3306"                       # host 3307 -> container 3306 (avoids clashing with a local MySQL on 3306)
+    volumes:
+      - mysql-data:/var/lib/mysql          # keeps data when the container is recreated
+      - ./docker/mysql-init:/docker-entrypoint-initdb.d   # *.sql files here run on first start
+    healthcheck:                           # other services wait until this passes
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p${DB_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # ---------------- Kafka (single broker, KRaft mode = no Zookeeper) ----------------
+  kafka:
+    image: apache/kafka:3.9.0              # pinned version (":latest" can change and break things)
+    container_name: saga-kafka
+    ports:
+      - "9092:9092"                        # for apps running on YOUR machine (IDE)
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      # Three listeners: PLAINTEXT (for other containers), PLAINTEXT_HOST (for your laptop), CONTROLLER (internal).
+      KAFKA_LISTENERS: PLAINTEXT://:29092,PLAINTEXT_HOST://:9092,CONTROLLER://:9093
+      # What clients are told to connect to. Containers use kafka:29092, your laptop uses localhost:9092.
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      # Only ONE broker, so internal topics must have replication factor 1
+      # (the default of 3 makes consumers hang forever waiting for a group coordinator!).
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 > /dev/null 2>&1"]
+      interval: 10s
+      timeout: 10s
+      retries: 15
+
+  # ---------------- Zipkin (trace viewer): http://localhost:9411 ----------------
+  zipkin:
+    image: openzipkin/zipkin:3
+    container_name: saga-zipkin
+    ports:
+      - "9411:9411"
+
+  # ---------------- Eureka registry: http://localhost:8761 ----------------
+  service-registry:
+    build: ./service-registry
+    container_name: saga-registry
+    ports:
+      - "8761:8761"
+
+  # ---------------- API Gateway: http://localhost:9090 (the only door for clients) ----------------
+  api-gateway:
+    build: ./api-gateway
+    container_name: saga-gateway
+    ports:
+      - "9090:9090"
+    environment:
+      EUREKA_URL: http://service-registry:8761/eureka
+      ZIPKIN_URL: http://zipkin:9411/api/v2/spans
+    depends_on:
+      - service-registry
+
+  # ---------------- Order Service (saga orchestrator) ----------------
+  order-service:
+    build: ./order-service
+    container_name: saga-order
+    ports:
+      - "8080:8080"
+    environment:
+      DB_URL: jdbc:mysql://mysql:3306/order_db?createDatabaseIfNotExist=true
+      DB_USERNAME: ${DB_USERNAME:-root}
+      DB_PASSWORD: ${DB_PASSWORD}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      EUREKA_URL: http://service-registry:8761/eureka
+      ZIPKIN_URL: http://zipkin:9411/api/v2/spans
+    depends_on:
+      mysql:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      service-registry:
+        condition: service_started
+
+  # ---------------- Payment Service ----------------
+  payment-service:
+    build: ./payment-service
+    container_name: saga-payment
+    ports:
+      - "8082:8082"
+    environment:
+      DB_URL: jdbc:mysql://mysql:3306/payment_db?createDatabaseIfNotExist=true
+      DB_USERNAME: ${DB_USERNAME:-root}
+      DB_PASSWORD: ${DB_PASSWORD}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      EUREKA_URL: http://service-registry:8761/eureka
+      ZIPKIN_URL: http://zipkin:9411/api/v2/spans
+      PAYMENT_FAILURE_RATE: ${PAYMENT_FAILURE_RATE:-0.2}
+    depends_on:
+      mysql:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      service-registry:
+        condition: service_started
+
+  # ---------------- Inventory Service ----------------
+  inventory-service:
+    build: ./inventory-service
+    container_name: saga-inventory
+    ports:
+      - "8083:8083"
+    environment:
+      DB_URL: jdbc:mysql://mysql:3306/inventory_db?createDatabaseIfNotExist=true
+      DB_USERNAME: ${DB_USERNAME:-root}
+      DB_PASSWORD: ${DB_PASSWORD}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      EUREKA_URL: http://service-registry:8761/eureka
+      ZIPKIN_URL: http://zipkin:9411/api/v2/spans
+    depends_on:
+      mysql:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      service-registry:
+        condition: service_started
+
+volumes:
+  mysql-data:

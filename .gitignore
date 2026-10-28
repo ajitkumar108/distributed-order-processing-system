@@ -1,0 +1,10 @@
+# Secrets - NEVER commit these
+.env
+application-local.properties
+
+# Build output / IDE files
+target/
+.idea/
+.vscode/
+*.iml
+*.log

@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Maven build file for: service-registry
+  Maven = the tool that downloads libraries ("dependencies") and builds the project into a runnable .jar.
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <!-- Parent = Spring Boot's "starter parent". It fixes compatible versions of hundreds of libraries for us. -->
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>3.5.6</version>
+        <relativePath/>
+    </parent>
+
+    <groupId>com.example</groupId>
+    <artifactId>service-registry</artifactId>
+    <version>0.0.1-SNAPSHOT</version>
+    <name>service-registry</name>
+    <description>Eureka service registry</description>
+
+    <properties>
+        <!-- Java version used to compile. -->
+        <java.version>17</java.version>
+        <!-- Spring Cloud release train that matches Spring Boot 3.5.x (Eureka, Gateway live here). -->
+        <spring-cloud.version>2025.0.0</spring-cloud.version>
+    </properties>
+
+    <dependencies>
+        <!-- Eureka SERVER: the phone book where services register themselves. -->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-netflix-eureka-server</artifactId>
+        </dependency>
+        <!-- Actuator: gives /actuator/health to check that the app is alive. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+    </dependencies>
+
+    <!-- Imports the Spring Cloud "bill of materials" so we don't write versions for Spring Cloud libraries. -->
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.springframework.cloud</groupId>
+                <artifactId>spring-cloud-dependencies</artifactId>
+                <version>${spring-cloud.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <build>
+        <plugins>
+            <!-- Packages the app as an executable "fat jar" (java -jar app.jar). -->
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration>
+                    <excludes>
+                        <!-- Lombok is only needed at compile time, so keep it out of the final jar. -->
+                        <exclude>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                        </exclude>
+                    </excludes>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>
